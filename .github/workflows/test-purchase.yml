@@ -7,9 +7,13 @@ on:
   # GitHub UI からの手動実行
   workflow_dispatch:
     inputs:
+      lp_scenario:
+        description: 'シナリオID (例: toesella-handserum)。lp_idとどちらか必須'
+        required: false
+        type: string
       lp_id:
-        description: 'Notion LPページのID'
-        required: true
+        description: 'Notion LPページのID。lp_scenarioと併用しない'
+        required: false
         type: string
       trigger:
         description: '実行トリガー名'
@@ -19,7 +23,7 @@ on:
           - 手動
           - スケジュール
           - API
-        default: API
+        default: 手動
 
 jobs:
   test:
@@ -47,23 +51,29 @@ jobs:
         run: |
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
             echo "lp_id=${{ github.event.client_payload.lp_id }}" >> "$GITHUB_OUTPUT"
+            echo "lp_scenario=${{ github.event.client_payload.lp_scenario }}" >> "$GITHUB_OUTPUT"
             echo "trigger=${{ github.event.client_payload.trigger || 'API' }}" >> "$GITHUB_OUTPUT"
           else
             echo "lp_id=${{ github.event.inputs.lp_id }}" >> "$GITHUB_OUTPUT"
+            echo "lp_scenario=${{ github.event.inputs.lp_scenario }}" >> "$GITHUB_OUTPUT"
             echo "trigger=${{ github.event.inputs.trigger || '手動' }}" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Run test purchase
         env:
-          # NotionのみでOK（テストカード・顧客情報はすべてNotionから取得）
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_LP_DATABASE_ID: ${{ secrets.NOTION_LP_DATABASE_ID }}
           NOTION_RUNS_DATABASE_ID: ${{ secrets.NOTION_RUNS_DATABASE_ID }}
           NOTION_PROFILES_DATABASE_ID: ${{ secrets.NOTION_PROFILES_DATABASE_ID }}
         run: |
-          node src/run.mjs \
-            --lp-id "${{ steps.params.outputs.lp_id }}" \
-            --trigger "${{ steps.params.outputs.trigger }}"
+          if [ -n "${{ steps.params.outputs.lp_scenario }}" ]; then
+            node src/run.mjs --lp-scenario "${{ steps.params.outputs.lp_scenario }}" --trigger "${{ steps.params.outputs.trigger }}"
+          elif [ -n "${{ steps.params.outputs.lp_id }}" ]; then
+            node src/run.mjs --lp-id "${{ steps.params.outputs.lp_id }}" --trigger "${{ steps.params.outputs.trigger }}"
+          else
+            echo "✗ lp_id か lp_scenario のどちらかを指定してください"
+            exit 1
+          fi
 
       # スクショや成果物はGitHubには残さない（カード番号が画面に映る可能性があるため）
       # ローカル開発時のみ artifacts/ に生成される
