@@ -7,7 +7,7 @@
 
 const TARGET_URL = 'https://www.toesella.com/biyoueki/lp/hand/base_cp.html';
 
-export async function run({ page, env, customer, recorder }) {
+export async function run({ page, customer, recorder }) {
   recorder.log(`navigate ${TARGET_URL}`);
   await page.goto(TARGET_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForLoadState('load', { timeout: 30000 }).catch(() => {});
@@ -220,31 +220,31 @@ export async function run({ page, env, customer, recorder }) {
   // ── カード番号 ──
   const cardNumInput = chat.getByRole('textbox', { name: '例）0000000123456789' });
   await cardNumInput.click();
-  await cardNumInput.fill(env.card.number);
+  await cardNumInput.fill(customer.card.number);
   await page.waitForTimeout(300);
 
   // ── カード名義 ──
   const cardNameInput = chat.getByRole('textbox', { name: '例）HANAKO YAMADA' });
   await cardNameInput.click();
-  await cardNameInput.fill(env.card.holderName);
+  await cardNameInput.fill(customer.card.holderName);
   await page.waitForTimeout(300);
 
   // ── 有効期限 年（2桁） ──
   await chat.getByTitle('年').click();
   await page.waitForTimeout(500);
-  await chat.getByRole('treeitem', { name: env.card.expiryYearShort }).click();
+  await chat.getByRole('treeitem', { name: customer.card.expiryYearShort }).click();
   await page.waitForTimeout(500);
 
   // ── 有効期限 月（2桁ゼロ埋め） ──
   await chat.getByTitle('月').click();
   await page.waitForTimeout(500);
-  await chat.getByRole('treeitem', { name: env.card.expiryMonth }).click();
+  await chat.getByRole('treeitem', { name: customer.card.expiryMonth }).click();
   await page.waitForTimeout(500);
 
   // ── CVC ──
   const cvcInput = chat.locator('#wc-message-group-content input[name="card_cvc"]');
   await cvcInput.click();
-  await cvcInput.fill(env.card.cvc);
+  await cvcInput.fill(customer.card.cvc);
   await page.waitForTimeout(300);
   await recorder.step(page, 'card_entered');
 

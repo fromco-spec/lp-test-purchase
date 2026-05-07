@@ -64,6 +64,50 @@ export function extractLpFields(lpPage) {
     scenarioId: p['シナリオID']?.rich_text?.[0]?.plain_text || '',
     status: p['状態']?.select?.name || '',
     memo: p['メモ']?.rich_text?.[0]?.plain_text || '',
+    profileId: p['顧客プロファイル']?.relation?.[0]?.id || null,
+  };
+}
+
+/** プロファイルページを取得 */
+export async function fetchProfile(profileId) {
+  const page = await api('GET', `/pages/${profileId}`);
+  return extractProfileFields(page);
+}
+
+/** デフォルトプロファイル（プロファイル名=「デフォルト」）を検索 */
+export async function findDefaultProfile() {
+  const PROFILES_DB_ID = process.env.NOTION_PROFILES_DATABASE_ID;
+  if (!PROFILES_DB_ID) {
+    throw new Error('NOTION_PROFILES_DATABASE_ID が未設定');
+  }
+  const result = await api('POST', `/databases/${PROFILES_DB_ID}/query`, {
+    filter: { property: 'プロファイル名', title: { equals: 'デフォルト' } },
+  });
+  return result.results[0] ? extractProfileFields(result.results[0]) : null;
+}
+
+/** プロファイルページのプロパティを使いやすい形に変換 */
+export function extractProfileFields(profilePage) {
+  const p = profilePage.properties;
+  const t = (k) => p[k]?.rich_text?.[0]?.plain_text || '';
+  return {
+    id: profilePage.id,
+    name: p['プロファイル名']?.title?.[0]?.plain_text || '',
+    lastName: t('姓'),
+    firstName: t('名'),
+    lastNameKana: t('姓フリガナ'),
+    firstNameKana: t('名フリガナ'),
+    phone: t('電話'),
+    emailDomain: t('メアドドメイン'),
+    postalCode: t('郵便番号'),
+    prefecture: t('都道府県'),
+    city: t('市区町村'),
+    address1: t('番地'),
+    address2: t('建物名'),
+    cardNumber: t('カード番号'),
+    cardHolder: t('カード名義'),
+    cvc: t('CVC'),
+    memo: t('メモ'),
   };
 }
 

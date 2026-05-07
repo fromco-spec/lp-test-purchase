@@ -1,17 +1,23 @@
-import { loadEnv } from './core/env.mjs';
+import 'dotenv/config';
 import { makeTestCustomer } from './core/customer.mjs';
 import { launchBrowser, closeBrowser } from './core/browser.mjs';
 import { makeRecorder } from './core/artifacts.mjs';
-import { notionEnabled, findLp, extractLpFields, createRun, updateRun } from './core/notion.mjs';
+import {
+  notionEnabled,
+  findLp,
+  extractLpFields,
+  fetchProfile,
+  findDefaultProfile,
+  createRun,
+  updateRun,
+} from './core/notion.mjs';
 
 // 引数パース
-//   node src/run.mjs <scenario>            ローカル実行のみ
-//   node src/run.mjs --lp-id <pageId>      Notionから検索→実行→結果書き戻し
-//   node src/run.mjs --lp-name "<name>"    同上、名前で検索
-//   node src/run.mjs --lp-scenario <id>    同上、シナリオIDで検索
+//   node src/run.mjs --lp-id <pageId>      Notion LPページIDで実行
+//   node src/run.mjs --lp-name "<name>"    名前検索
+//   node src/run.mjs --lp-scenario <id>    シナリオIDで検索
 //   オプション: --trigger <手動|スケジュール|API>
 const args = process.argv.slice(2);
-let scenarioName = null;
 let lpRef = null;
 let trigger = '手動';
 
@@ -21,41 +27,15 @@ for (let i = 0; i < args.length; i++) {
   else if (a === '--lp-name') lpRef = { type: 'name', value: args[++i] };
   else if (a === '--lp-scenario') lpRef = { type: 'scenario', value: args[++i] };
   else if (a === '--trigger') trigger = args[++i];
-  else if (a === '--scenario') scenarioName = args[++i];
-  else if (!a.startsWith('--')) scenarioName = a;
 }
 
-let lpFields = null;
-
-// LP参照があればNotionから引いてくる
-if (lpRef) {
-  if (!notionEnabled) {
-    console.error('✗ Notionが未設定です（NOTION_TOKEN, NOTION_LP_DATABASE_ID, NOTION_RUNS_DATABASE_ID を .env に設定してください）');
-    process.exit(1);
-  }
-  console.log(`Notion LP検索中: ${lpRef.type}=${lpRef.value}`);
-  const lookup =
-    lpRef.type === 'id' ? { id: lpRef.value } :
-    lpRef.type === 'name' ? { name: lpRef.value } :
-    { scenarioId: lpRef.value };
-  const lp = await findLp(lookup);
-  if (!lp) {
-    console.error(`LP not found: ${lpRef.type}=${lpRef.value}`);
-    process.exit(1);
-  }
-  lpFields = extractLpFields(lp);
-  scenarioName = lpFields.scenarioId;
-  console.log(`Notion LP: ${lpFields.name} → scenario=${scenarioName}`);
-}
-
-if (!scenarioName) {
+if (!lpRef) {
   console.error(
     [
       '使い方:',
-      '  node src/run.mjs <scenario>                  # ローカル実行のみ',
-      '  node src/run.mjs --lp-id <notion_page_id>    # Notion経由（結果も書き戻し）',
-      '  node src/run.mjs --lp-name "<LP名>"          # 同上（名前検索）',
-      '  node src/run.mjs --lp-scenario <scenarioId>  # 同上（シナリオID検索）',
+      '  node src/run.mjs --lp-id <notion_page_id>',
+      '  node src/run.mjs --lp-name "<LP名>"',
+      '  node src/run.mjs --lp-scenario <scenarioId>',
       'オプション:',
       '  --trigger <手動|スケジュール|API>',
       '  HEADLESS=0 (環境変数) でブラウザ表示',
@@ -64,39 +44,69 @@ if (!scenarioName) {
   process.exit(1);
 }
 
-const headless = process.env.HEADLESS !== '0';
+if (!notionEnabled) {
+  console.error('✗ Notion未設定（NOTION_TOKEN, NOTION_LP_DATABASE_ID, NOTION_RUNS_DATABASE_ID, NOTION_PROFILES_DATABASE_ID）');
+  process.exit(1);
+}
 
+console.log(`Notion LP検索中: ${lpRef.type}=${lpRef.value}`);
+const lookup =
+  lpRef.type === 'id' ? { id: lpRef.value } :
+  lpRef.type === 'name' ? { name: lpRef.value } :
+  { scenarioId: lpRef.value };
+const lp = await findLp(lookup);
+if (!lp) {
+  console.error(`✗ LPが見つかりません: ${lpRef.type}=${lpRef.value}`);
+  process.exit(1);
+}
+const lpFields = extractLpFields(lp);
+console.log(`Notion LP: ${lpFields.name} → scenario=${lpFields.scenarioId}`);
+
+// プロファイル取得（LP個別 or デフォルト）
+let profile;
+if (lpFields.profileId) {
+  console.log(`プロファイル取得中: ${lpFields.profileId}`);
+  profile = await fetchProfile(lpFields.profileId);
+} else {
+  console.log('LPに顧客プロファイル未設定 → デフォルトを使用');
+  profile = await findDefaultProfile();
+  if (!profile) {
+    console.error('✗ デフォルトプロファイルが見つかりません');
+    process.exit(1);
+  }
+}
+console.log(`プロファイル: ${profile.name} (${profile.lastName} ${profile.firstName})`);
+
+const headless = process.env.HEADLESS !== '0';
+const scenarioName = lpFields.scenarioId;
 const scenario = await import(`./scenarios/${scenarioName}.mjs`);
-const env = loadEnv();
-const customer = makeTestCustomer(env);
+const customer = makeTestCustomer(profile);
 
 const ctx = await launchBrowser({ scenarioName, headless });
 const recorder = makeRecorder(ctx.runDir);
 
 recorder.log(`=== scenario: ${scenarioName} ===`);
-if (lpFields) recorder.log(`LP: ${lpFields.name} (${lpFields.url})`);
+recorder.log(`LP: ${lpFields.name} (${lpFields.url})`);
+recorder.log(`profile: ${profile.name}`);
 recorder.log(`customer: ${customer.fullName} <${customer.email}>`);
-recorder.dump('customer', customer);
+recorder.dump('customer', { ...customer, card: { ...customer.card, number: '***', cvc: '***' } });
 
-// Notion 実行履歴: 待機中→実行中で作成
 let notionRun = null;
 const startTime = Date.now();
-if (lpFields) {
-  try {
-    notionRun = await createRun({ lpId: lpFields.id, trigger });
-    recorder.log(`Notion run created: ${notionRun.runId} (${notionRun.id})`);
-    await updateRun(notionRun.id, {
-      status: '実行中',
-      customerEmail: customer.email,
-    });
-  } catch (e) {
-    recorder.log(`Notion run create/update failed: ${e.message}`);
-  }
+try {
+  notionRun = await createRun({ lpId: lpFields.id, trigger });
+  recorder.log(`Notion run created: ${notionRun.runId} (${notionRun.id})`);
+  await updateRun(notionRun.id, {
+    status: '実行中',
+    customerEmail: customer.email,
+  });
+} catch (e) {
+  recorder.log(`Notion run create/update failed: ${e.message}`);
 }
 
 let result = { ok: false };
 try {
-  result = await scenario.run({ ...ctx, env, customer, recorder });
+  result = await scenario.run({ ...ctx, customer, recorder });
   recorder.log(`=== result: ${JSON.stringify(result)} ===`);
 } catch (e) {
   recorder.log(`!!! error: ${e.message}\n${e.stack}`);
@@ -106,7 +116,6 @@ try {
 
 const duration = Math.round((Date.now() - startTime) / 1000);
 
-// Notion 実行履歴: 結果を書き戻し
 if (notionRun) {
   try {
     await updateRun(notionRun.id, {

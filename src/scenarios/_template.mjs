@@ -5,8 +5,8 @@
  * 引数:
  *   page      Playwrightのpage（メインフレーム）
  *   context   Playwrightのcontext
- *   env       .env を読み込んだ設定（テストカード等）
- *   customer  テスト顧客データ（毎回ユニーク生成）
+ *   customer  Notion由来のテスト顧客データ + 自動生成（メアド・カード有効期限）
+ *             customer.card.{number, holderName, cvc, expiryMonth, expiryYear, expiryYearShort}
  *   recorder  { log, step, dump } ログ・スクショ・JSONダンプ用
  *
  * 戻り値: { ok: true, orderNumber?: string, ... } / { ok: false, error: '...' }
@@ -14,7 +14,7 @@
 
 const TARGET_URL = 'https://example.com/lp';
 
-export async function run({ page, env, customer, recorder }) {
+export async function run({ page, customer, recorder }) {
   recorder.log(`navigate ${TARGET_URL}`);
   await page.goto(TARGET_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await recorder.step(page, 'landed');

@@ -55,26 +55,15 @@ jobs:
 
       - name: Run test purchase
         env:
-          # Notion
+          # NotionのみでOK（テストカード・顧客情報はすべてNotionから取得）
           NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
           NOTION_LP_DATABASE_ID: ${{ secrets.NOTION_LP_DATABASE_ID }}
           NOTION_RUNS_DATABASE_ID: ${{ secrets.NOTION_RUNS_DATABASE_ID }}
-          # テストカード
-          TEST_CARD_NUMBER: ${{ secrets.TEST_CARD_NUMBER }}
-          TEST_CARD_CVC: ${{ secrets.TEST_CARD_CVC }}
-          TEST_CARD_HOLDER_NAME: ${{ secrets.TEST_CARD_HOLDER_NAME }}
-          # メアドドメイン
-          TEST_EMAIL_DOMAIN: ${{ secrets.TEST_EMAIL_DOMAIN }}
-          # 住所などはデフォルトで OK
+          NOTION_PROFILES_DATABASE_ID: ${{ secrets.NOTION_PROFILES_DATABASE_ID }}
         run: |
           node src/run.mjs \
             --lp-id "${{ steps.params.outputs.lp_id }}" \
             --trigger "${{ steps.params.outputs.trigger }}"
 
-      - name: Upload artifacts (always)
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-artifacts-${{ github.run_id }}
-          path: artifacts/
-          retention-days: 14
+      # スクショや成果物はGitHubには残さない（カード番号が画面に映る可能性があるため）
+      # ローカル開発時のみ artifacts/ に生成される

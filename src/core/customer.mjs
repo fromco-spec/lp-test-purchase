@@ -8,27 +8,46 @@ function randomString(len) {
   return s;
 }
 
-export function makeTestCustomer(env) {
-  const ts = new Date()
+/**
+ * Notion由来のプロファイル + 自動生成項目（メアド・有効期限）を合わせて
+ * シナリオで使う customer オブジェクトを作る。
+ */
+export function makeTestCustomer(profile) {
+  const now = new Date();
+  const ts = now
     .toISOString()
     .replace(/[-:T.Z]/g, '')
     .slice(0, 14);
   const localPart = randomString(20);
+
+  // 有効期限: 実行時の今月・今年
+  const expiryMonth = String(now.getMonth() + 1).padStart(2, '0');
+  const expiryYear = String(now.getFullYear());
+  const expiryYearShort = expiryYear.slice(-2);
+
   return {
-    lastName: 'テスト',
-    firstName: 'テスト',
-    lastNameKana: 'てすと',
-    firstNameKana: 'てすと',
-    fullName: 'テスト テスト',
-    email: `${localPart}+${env.email.tag}-${ts}@${env.email.domain}`,
-    phone: '08000000000',
-    phoneFormatted: '080-0000-0000',
-    postalCode: env.address.postalCode,
-    prefecture: env.address.prefecture,
-    city: env.address.city,
-    address1: env.address.address1,
-    address2: env.address.address2,
-    fullAddress: `${env.address.prefecture}${env.address.city}${env.address.address1} ${env.address.address2}`,
+    lastName: profile.lastName,
+    firstName: profile.firstName,
+    lastNameKana: profile.lastNameKana,
+    firstNameKana: profile.firstNameKana,
+    fullName: `${profile.lastName} ${profile.firstName}`,
+    email: `${localPart}+autotest-${ts}@${profile.emailDomain}`,
+    phone: profile.phone,
+    postalCode: profile.postalCode,
+    prefecture: profile.prefecture,
+    city: profile.city,
+    address1: profile.address1,
+    address2: profile.address2,
+    fullAddress: `${profile.prefecture}${profile.city}${profile.address1} ${profile.address2}`,
     marker: ts,
+    profileName: profile.name,
+    card: {
+      number: profile.cardNumber,
+      holderName: profile.cardHolder,
+      cvc: profile.cvc,
+      expiryMonth,
+      expiryYear,
+      expiryYearShort,
+    },
   };
 }
