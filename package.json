@@ -1,0 +1,17 @@
+{
+  "name": "lp-test-purchase",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "LPテスト購入の自動化PoC",
+  "scripts": {
+    "run": "node src/run.mjs",
+    "record": "playwright codegen --target=javascript --output recordings/recording.mjs --viewport-size=1280,900 --user-agent=\"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36\"",
+    "setup:notion": "node scripts/setup-notion.mjs",
+    "trigger:github": "node scripts/trigger-github.mjs"
+  },
+  "devDependencies": {
+    "playwright": "^1.48.0",
+    "dotenv": "^16.4.5"
+  }
+}

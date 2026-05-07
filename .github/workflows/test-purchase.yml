@@ -1,0 +1,80 @@
+name: Test Purchase
+
+on:
+  # 外部API（Streamlit等）からトリガー
+  repository_dispatch:
+    types: [run_test_purchase]
+  # GitHub UI からの手動実行
+  workflow_dispatch:
+    inputs:
+      lp_id:
+        description: 'Notion LPページのID'
+        required: true
+        type: string
+      trigger:
+        description: '実行トリガー名'
+        required: false
+        type: choice
+        options:
+          - 手動
+          - スケジュール
+          - API
+        default: API
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Resolve trigger params
+        id: params
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "lp_id=${{ github.event.client_payload.lp_id }}" >> "$GITHUB_OUTPUT"
+            echo "trigger=${{ github.event.client_payload.trigger || 'API' }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "lp_id=${{ github.event.inputs.lp_id }}" >> "$GITHUB_OUTPUT"
+            echo "trigger=${{ github.event.inputs.trigger || '手動' }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Run test purchase
+        env:
+          # Notion
+          NOTION_TOKEN: ${{ secrets.NOTION_TOKEN }}
+          NOTION_LP_DATABASE_ID: ${{ secrets.NOTION_LP_DATABASE_ID }}
+          NOTION_RUNS_DATABASE_ID: ${{ secrets.NOTION_RUNS_DATABASE_ID }}
+          # テストカード
+          TEST_CARD_NUMBER: ${{ secrets.TEST_CARD_NUMBER }}
+          TEST_CARD_CVC: ${{ secrets.TEST_CARD_CVC }}
+          TEST_CARD_HOLDER_NAME: ${{ secrets.TEST_CARD_HOLDER_NAME }}
+          # メアドドメイン
+          TEST_EMAIL_DOMAIN: ${{ secrets.TEST_EMAIL_DOMAIN }}
+          # 住所などはデフォルトで OK
+        run: |
+          node src/run.mjs \
+            --lp-id "${{ steps.params.outputs.lp_id }}" \
+            --trigger "${{ steps.params.outputs.trigger }}"
+
+      - name: Upload artifacts (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-artifacts-${{ github.run_id }}
+          path: artifacts/
+          retention-days: 14
