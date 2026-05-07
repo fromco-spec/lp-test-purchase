@@ -6,3 +6,10 @@ artifacts/
 recordings/
 *.log
 .DS_Store
+
+# Streamlit
+streamlit/.streamlit/secrets.toml
+__pycache__/
+*.pyc
+.venv/
+venv/

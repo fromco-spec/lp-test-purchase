@@ -109,22 +109,27 @@ try {
   result = await scenario.run({ ...ctx, customer, recorder });
   recorder.log(`=== result: ${JSON.stringify(result)} ===`);
 } catch (e) {
-  recorder.log(`!!! error: ${e.message}\n${e.stack}`);
+  const failedPhase = e.failedAtPhase || recorder.getCurrentPhase() || '不明';
+  recorder.log(`!!! error at phase "${failedPhase}": ${e.message}\n${e.stack}`);
   await ctx.page.screenshot({ path: `${ctx.runDir}/_error.png`, fullPage: true }).catch(() => {});
-  result = { ok: false, error: e.message };
+  result = { ok: false, error: e.message, failedPhase };
 }
 
 const duration = Math.round((Date.now() - startTime) / 1000);
 
 if (notionRun) {
   try {
+    // 失敗時はエラーメッセージの先頭にフェーズ名を入れる
+    const errorWithPhase = result.error
+      ? (result.failedPhase ? `[失敗フェーズ: ${result.failedPhase}]\n${result.error}` : result.error)
+      : undefined;
     await updateRun(notionRun.id, {
       status: result.ok ? '成功' : '失敗',
       completedAt: new Date().toISOString(),
       customerEmail: customer.email,
       orderNumber: result.orderNumber || undefined,
       thankYouMatch: result.thankYouMatch || undefined,
-      error: result.error || undefined,
+      error: errorWithPhase,
       durationSeconds: duration,
     });
     recorder.log(`Notion run updated: status=${result.ok ? '成功' : '失敗'} duration=${duration}s`);

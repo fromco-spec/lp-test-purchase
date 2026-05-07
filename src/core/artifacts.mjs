@@ -4,6 +4,7 @@ import { join } from 'node:path';
 export function makeRecorder(runDir) {
   const logPath = join(runDir, 'run.log');
   let stepIdx = 0;
+  let currentPhase = null;
 
   function log(msg) {
     const line = `[${new Date().toISOString()}] ${msg}\n`;
@@ -31,5 +32,24 @@ export function makeRecorder(runDir) {
     log(`dump → ${file}`);
   }
 
-  return { log, step, dump };
+  /**
+   * 「フェーズ」(=ユーザーから見て意味のある工程) を区切る。
+   * 失敗時にどのフェーズで詰まったか分かるようにエラーへ付与する。
+   */
+  async function phase(label, fn) {
+    currentPhase = label;
+    log(`──── ${label} ────`);
+    try {
+      return await fn();
+    } catch (e) {
+      if (!e.failedAtPhase) e.failedAtPhase = label;
+      throw e;
+    }
+  }
+
+  function getCurrentPhase() {
+    return currentPhase;
+  }
+
+  return { log, step, dump, phase, getCurrentPhase };
 }
