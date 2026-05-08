@@ -6,9 +6,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from datetime import datetime
 import streamlit as st
+from lib.auth import require_auth
 from lib.notion_client import NotionClient
 
 st.set_page_config(page_title="実行履歴", layout="wide")
+require_auth()
 st.title("実行履歴")
 
 

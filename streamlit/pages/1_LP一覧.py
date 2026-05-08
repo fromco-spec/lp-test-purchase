@@ -7,10 +7,12 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import streamlit as st
+from lib.auth import require_auth
 from lib.notion_client import NotionClient
 from lib.github_client import GitHubClient
 
 st.set_page_config(page_title="LP一覧", layout="wide")
+require_auth()
 st.title("LP一覧")
 
 
