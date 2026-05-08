@@ -1,4 +1,6 @@
 """LP一覧ページ - 登録LPの表示と実行トリガー"""
+from __future__ import annotations
+
 import sys
 import time
 from datetime import datetime, timezone

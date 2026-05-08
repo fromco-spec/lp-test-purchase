@@ -1,4 +1,6 @@
 """実行履歴ページ - Notion 実行履歴DBから読み取り表示"""
+from __future__ import annotations
+
 import sys
 from pathlib import Path
 
