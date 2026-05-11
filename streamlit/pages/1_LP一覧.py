@@ -1,8 +1,10 @@
 """LP一覧ページ - 登録LPの表示と実行トリガー"""
 from __future__ import annotations
 
+import re
 import sys
 import time
+from collections import OrderedDict
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -150,70 +152,96 @@ st.divider()
 if "running_lp" not in st.session_state:
     st.session_state.running_lp = None
 
+
+def _brand_key(lp) -> str:
+    """商材グループのキー。シナリオID末尾の -soku を取り除いたもの。"""
+    sid = lp.get("scenario_id") or ""
+    if sid:
+        return sid[: -len("-soku")] if sid.endswith("-soku") else sid
+    return lp.get("name", "")
+
+
+def _brand_label(lp_name: str) -> str:
+    """LP名から商材名部分を抜き出す。"toesella <商材> (variant)" → <商材>。"""
+    m = re.match(r"^\s*toesella\s+(.+?)\s*[（(]", lp_name)
+    return m.group(1).strip() if m else lp_name
+
+
+# 商材ごとにグルーピング（順序は最初に登場した順）
+groups: "OrderedDict[str, list]" = OrderedDict()
 for lp in filtered:
-    with st.container():
-        c1, c2, c3 = st.columns([4, 1.5, 1.5])
+    groups.setdefault(_brand_key(lp), []).append(lp)
 
-        with c1:
-            st.markdown(f"### {lp['name']}")
-            if lp["url"]:
-                st.markdown(f"🔗 [{lp['url']}]({lp['url']})")
-            cap = []
-            if lp["form_type"]:
-                cap.append(f"形式: {lp['form_type']}")
-            if lp["scenario_id"]:
-                cap.append(f"シナリオ: `{lp['scenario_id']}`")
-            if lp["status"]:
-                cap.append(f"状態: {lp['status']}")
-            st.caption(" / ".join(cap))
-            if lp["memo"]:
-                st.caption(lp["memo"])
+# 各グループ内は 通常版 → 即版 の順に並べる
+for key in groups:
+    groups[key].sort(key=lambda lp: (lp.get("scenario_id") or "").endswith("-soku"))
 
-        with c2:
-            st.write("")
-            if not lp["scenario_id"]:
-                st.warning("シナリオ未設定")
-            elif lp["status"] != "有効":
-                st.info(f"状態: {lp['status']}")
+for brand_key, lps_in_group in groups.items():
+    st.markdown(f"## {_brand_label(lps_in_group[0]['name'])}")
+    for lp in lps_in_group:
+        with st.container():
+            c1, c2, c3 = st.columns([4, 1.5, 1.5])
 
-        with c3:
-            st.write("")
-            run_disabled = (lp["status"] != "有効") or (not lp["scenario_id"])
-            if st.button(
-                "▶ 実行",
-                key=f"run_{lp['id']}",
-                disabled=run_disabled,
-                use_container_width=True,
-                type="primary",
-            ):
-                st.session_state.running_lp = lp["id"]
-                # 実行起動
+            with c1:
+                st.markdown(f"### {lp['name']}")
+                if lp["url"]:
+                    st.markdown(f"🔗 [{lp['url']}]({lp['url']})")
+                cap = []
+                if lp["form_type"]:
+                    cap.append(f"形式: {lp['form_type']}")
+                if lp["scenario_id"]:
+                    cap.append(f"シナリオ: `{lp['scenario_id']}`")
+                if lp["status"]:
+                    cap.append(f"状態: {lp['status']}")
+                st.caption(" / ".join(cap))
+                if lp["memo"]:
+                    st.caption(lp["memo"])
+
+            with c2:
+                st.write("")
+                if not lp["scenario_id"]:
+                    st.warning("シナリオ未設定")
+                elif lp["status"] != "有効":
+                    st.info(f"状態: {lp['status']}")
+
+            with c3:
+                st.write("")
+                run_disabled = (lp["status"] != "有効") or (not lp["scenario_id"])
+                if st.button(
+                    "▶ 実行",
+                    key=f"run_{lp['id']}",
+                    disabled=run_disabled,
+                    use_container_width=True,
+                    type="primary",
+                ):
+                    st.session_state.running_lp = lp["id"]
+                    # 実行起動
+                    try:
+                        github = get_github()
+                        github.trigger_workflow(lp_scenario=lp["scenario_id"], trigger="API")
+                        st.toast(f"「{lp['name']}」を起動しました", icon="🚀")
+                    except Exception as e:
+                        st.error(f"起動失敗: {e}")
+                        st.session_state.running_lp = None
+
+            # 進捗表示エリア
+            if st.session_state.running_lp == lp["id"]:
+                st.markdown("---")
+                st.markdown(f"### 🔄 「{lp['name']}」 実行中...")
                 try:
                     github = get_github()
-                    github.trigger_workflow(lp_scenario=lp["scenario_id"], trigger="API")
-                    st.toast(f"「{lp['name']}」を起動しました", icon="🚀")
+                    with st.spinner("ワークフロー検出中..."):
+                        target = find_my_run(github)
+                    if target:
+                        watch_run(github, target["id"], lp["name"])
+                    else:
+                        st.warning(
+                            "ワークフロー起動を確認できませんでした。"
+                            f"[GitHub Actionsで確認 →]({get_github().actions_url()})"
+                        )
                 except Exception as e:
-                    st.error(f"起動失敗: {e}")
+                    st.error(f"監視中エラー: {e}")
+                finally:
                     st.session_state.running_lp = None
 
-        # 進捗表示エリア
-        if st.session_state.running_lp == lp["id"]:
-            st.markdown("---")
-            st.markdown(f"### 🔄 「{lp['name']}」 実行中...")
-            try:
-                github = get_github()
-                with st.spinner("ワークフロー検出中..."):
-                    target = find_my_run(github)
-                if target:
-                    watch_run(github, target["id"], lp["name"])
-                else:
-                    st.warning(
-                        "ワークフロー起動を確認できませんでした。"
-                        f"[GitHub Actionsで確認 →]({get_github().actions_url()})"
-                    )
-            except Exception as e:
-                st.error(f"監視中エラー: {e}")
-            finally:
-                st.session_state.running_lp = None
-
-        st.divider()
+            st.divider()
