@@ -18,7 +18,10 @@ export function makeRecorder(runDir) {
     const safe = label.replace(/[^a-z0-9_-]/gi, '_').slice(0, 40);
     const file = join(runDir, `${idx}_${safe}.png`);
     try {
-      await page.screenshot({ path: file, fullPage: false });
+      // animations: 'disabled' でCSSアニメーションを停止状態にキャプチャ
+      // (一部LP(pack即版など)のBotchanは永続アニメーションを持ち、デフォルト30sタイムアウトを誘発する)
+      // timeout: 10s で「撮れないなら諦める」方針（スクショは診断目的、必須ではない）
+      await page.screenshot({ path: file, fullPage: false, animations: 'disabled', timeout: 10000 });
       log(`step ${idx}: ${label} → ${file}`);
     } catch (e) {
       log(`step ${idx}: ${label} (screenshot failed: ${e.message})`);
